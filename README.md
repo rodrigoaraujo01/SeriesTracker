@@ -13,4 +13,4 @@ episodes.
 
 It takes a html fetch action to get each episode synopsis, so for long running
 series, the fetching process might take a while. To avoid synopsis fetching,
-it's only necessary to comment line 107.
+it's only necessary to set SYNOPSIS to False.
