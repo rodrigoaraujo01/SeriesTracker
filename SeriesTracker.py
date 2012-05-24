@@ -1,14 +1,20 @@
 #!/usr/bin/env python
 
-from bs4 import BeautifulSoup
-from bs4.element import Tag
 from urllib import urlopen
 
 DEBUG = True
 SYNOPSIS = True
-BASE_URL = u'http://www.tvrage.com'
-BASE_SEARCH_URL = u'http://www.tvrage.com/search.php?search='
+BASE_URL = 'http://www.tvrage.com'
+BASE_SEARCH_URL = 'http://www.tvrage.com/search.php?search='
 EPISODES_URL = '/episode_list/all'
+USING_LXML = True
+USING_BEAUTIFUL_SOUP = False
+
+if USING_LXML:
+    from lxml.html import parse
+if USING_BEAUTIFUL_SOUP:
+    from bs4 import BeautifulSoup
+    from bs4.element import Tag
 
 def parse_series(series_div):
     '''
@@ -43,15 +49,27 @@ def parse_series(series_div):
        </dl>
     </div>
     '''
-    #print series.prettify()
-    title = series_div.find_all('a')[0].string
-    episodes_url = BASE_URL + series_div.find_all('a')[0]['href'] + EPISODES_URL
-    if len(series_div.find_all('a')) == 3:
-        last_air_date = series_div.find_all('dd')[1].contents[2]
-        last_episode = series_div.find_all('a')[2].string
-        return title, episodes_url, last_air_date, last_episode
-    else:
-        return title, episodes_url
+    if USING_LXML:
+        anchors = series_div.cssselect('a')
+        dd = series_div.cssselect('dd')
+        title = anchors[0].text_content()
+        episodes_url = BASE_URL + anchors[0].get('href') + EPISODES_URL
+        if len(anchors) == 3:
+            last_air_date = dd[1].text_content().split(' ')[2]
+            last_episode = anchors[2].text_content()
+            return title, episodes_url, last_air_date, last_episode
+        else:
+            return title, episodes_url
+    if USING_BEAUTIFUL_SOUP:
+        #print series.prettify()
+        title = series_div.find_all('a')[0].string
+        episodes_url = BASE_URL + series_div.find_all('a')[0]['href'] + EPISODES_URL
+        if len(series_div.find_all('a')) == 3:
+            last_air_date = series_div.find_all('dd')[1].contents[2]
+            last_episode = series_div.find_all('a')[2].string
+            return title, episodes_url, last_air_date, last_episode
+        else:
+            return title, episodes_url
 
 def get_synopsis(episode_url):
     html = urlopen(episode_url).read()
@@ -114,9 +132,15 @@ def parse_episode(episode_tr):
 def search_series(series_name):
     series_name = series_name.replace(' ','+')
     url = BASE_SEARCH_URL + series_name
-    html = urlopen(url).read()
-    soup = BeautifulSoup(html, 'lxml')
-    series_list = soup.find_all(id='show_search')
+    
+    if USING_LXML:
+        doc = parse(urlopen(url)).getroot()
+        series_list = doc.cssselect('div #show_search')
+
+    if USING_BEAUTIFUL_SOUP:
+        soup = BeautifulSoup(html, 'lxml')
+        series_list = soup.find_all(id='show_search')
+
     results = []
     for item in series_list:
         results.append(parse_series(item))
@@ -136,9 +160,9 @@ def get_episodes(series_tuple):
 
 def main():
     results = search_series('Game of Thrones')
-    episode_list = get_episodes(results[0])
-    for episode in episode_list:
-        print episode
+    #episode_list = get_episodes(results[0])
+    #for episode in episode_list:
+    #    print episode
 
 if __name__ == '__main__':
     main()
