@@ -14,7 +14,6 @@ if USING_LXML:
     from lxml.html import parse
 if USING_BEAUTIFUL_SOUP:
     from bs4 import BeautifulSoup
-    from bs4.element import Tag
 
 def parse_series(series_div):
     '''
@@ -72,9 +71,15 @@ def parse_series(series_div):
             return title, episodes_url
 
 def get_synopsis(episode_url):
-    html = urlopen(episode_url).read()
-    soup = BeautifulSoup(html)
-    synopsis = soup.find_all('div', 'show_synopsis')[0].contents[0]
+    if USING_LXML:
+        doc = parse(urlopen(episode_url)).getroot()
+        synopsis = doc.cssselect('div .show_synopsis')[0].text_content()
+        synopsis = synopsis.split('\n')[1]
+
+    if USING_BEAUTIFUL_SOUP:
+        html = urlopen(episode_url).read()
+        soup = BeautifulSoup(html)
+        synopsis = soup.find_all('div', 'show_synopsis')[0].contents[0]
     return synopsis.lstrip()
 
 def parse_episode(episode_tr):
@@ -113,31 +118,45 @@ def parse_episode(episode_tr):
         </td>
     </tr>
     '''
-    if isinstance(episode_tr.parent.previous_sibling, Tag):
+    if USING_LXML:
+        anchors = episode_tr.cssselect('a')
+        number = anchors[0].text_content()
+        name = episode_tr.cssselect('td a')[-1].text_content()
+        season = number.split('x')[0]
+        air_date = episode_tr.cssselect('td')[2].text_content()
+        episode_url = BASE_URL + anchors[-1].get('href')
+        if SYNOPSIS:
+            synopsis = get_synopsis(episode_url)
+            if DEBUG:
+                print "Fetched synopsis for episode %s" % number
+    if USING_BEAUTIFUL_SOUP:
+        anchors = episode_tr.find_all('a')
+        td = episode_tr.find_all('td')
+        number = anchors[0].string
+        name = td[3].find_all('a')[-1].string
+        season = number.split('x')[0]
+        air_date = td[2].string
+        episode_url = BASE_URL + anchors[-1]['href']
+        synopsis = u''
+        if SYNOPSIS:
+            synopsis = get_synopsis(episode_url)
+            if DEBUG:
+                print "Fetched synopsis for episode %s" % number
+    if len(season) != 1:
         return None
-    anchors = episode_tr.find_all('a')
-    td = episode_tr.find_all('td')
-    number = anchors[0].string
-    name = td[3].find_all('a')[-1].string
-    season = number.split('x')[0]
-    air_date = episode_tr.find_all('td')[2].string
-    episode_url = BASE_URL + anchors[-1]['href']
-    synopsis = u''
-    if SYNOPSIS:
-        synopsis = get_synopsis(episode_url)
-        if DEBUG:
-            print "Fetched synopsis for episode %s" % number
-    return number, name, season, air_date, synopsis
+    else:
+        return number, name, season, air_date, synopsis
 
 def search_series(series_name):
     series_name = series_name.replace(' ','+')
     url = BASE_SEARCH_URL + series_name
-    
+
     if USING_LXML:
         doc = parse(urlopen(url)).getroot()
         series_list = doc.cssselect('div #show_search')
 
     if USING_BEAUTIFUL_SOUP:
+        html = urlopen(url).read()
         soup = BeautifulSoup(html, 'lxml')
         series_list = soup.find_all(id='show_search')
 
@@ -148,9 +167,16 @@ def search_series(series_name):
 
 def get_episodes(series_tuple):
     url = series_tuple[1]
-    html = urlopen(url).read()
-    soup = BeautifulSoup(html)
-    episodes_table = soup.find_all(id='brow')
+
+    if USING_LXML:
+        doc = parse(urlopen(url)).getroot()
+        episodes_table = doc.cssselect('div #brow')
+
+    if USING_BEAUTIFUL_SOUP:
+        html = urlopen(url).read()
+        soup = BeautifulSoup(html, 'lxml')
+        episodes_table = soup.find_all(id='brow')
+
     episode_list = []
     for item in episodes_table:
         episode = parse_episode(item)
@@ -160,9 +186,9 @@ def get_episodes(series_tuple):
 
 def main():
     results = search_series('Game of Thrones')
-    #episode_list = get_episodes(results[0])
-    #for episode in episode_list:
-    #    print episode
+    episode_list = get_episodes(results[0])
+    for episode in episode_list:
+        print episode
 
 if __name__ == '__main__':
     main()
